@@ -4,6 +4,10 @@ import smtplib, ssl
 import os
 from dotenv import load_dotenv 
 import time
+import sqlite3
+
+"INSERT INTO events VALUES ('Tigers', 'Tiger City', '2088.10.14')"
+"SELECT * FROM events WHERE date='2088.10.15'"
 
 load_dotenv()
 
@@ -12,6 +16,8 @@ HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) '
     'AppleWebKit/537.36 (KHTML, like Gecko) '
     'Chrome/39.0.2171.95 Safari/537.36'}
+
+connection = sqlite3.connect("data.db")
 
 def scrape(url):
     """scrape the page source from the URL"""
@@ -39,23 +45,35 @@ def extract(source):
     value=extractor.extract(source)["tours"]
     return value
 
-def read_file():
-    """Read data.txt and return list of existing events"""
-    try:
-        with open("data.txt", "r") as file:
-            return [line.strip() for line in file.readlines()]
-    except FileNotFoundError:
-        return []
 
-if __name__=="__main__":
+def store(extracted):
+    row = extracted.split(",")
+    row = [item.strip() for item in row]
+    cursor = connection.cursor()
+    cursor.execute("INSERT INTO events VALUES(?,?,?)", row)
+    connection.commit()
+
+
+def read(extracted):
+    row = extracted.split(",")
+    row = [item.strip() for item in row]
+    GroupName, city, date = row
+    cursor = connection.cursor()
+    cursor.execute("SELECT * FROM events WHERE GroupName=? AND city=? AND date=?", (GroupName, city, date))
+    rows = cursor.fetchall()
+    print(rows)
+    return rows
+
+
+if __name__ == "__main__":
     while True:
-        scraped=scrape(URL)
-        extracted=extract(scraped)
+        scraped = scrape(URL)
+        extracted = extract(scraped)
         print(extracted)
 
-        existing_events = read_file()
-        if extracted not in existing_events:
-            with open("data.txt", "a") as file:
-                file.write(extracted + "\n") 
-                send_email(message="New event was found")  
-            time.sleep(2)
+        if extracted != "No upcoming tours":
+            row = read(extracted)
+            if not row:
+                store(extracted)
+                send_email(message="Hey, new event was found!")
+        time.sleep(2)
