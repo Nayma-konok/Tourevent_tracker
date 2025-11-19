@@ -19,61 +19,69 @@ HEADERS = {
 
 connection = sqlite3.connect("data.db")
 
-def scrape(url):
-    """scrape the page source from the URL"""
-    response=requests.get(url, headers= HEADERS)
-    source=response.text
-    return source
-
-def send_email(message):
-    host = "smtp.gmail.com"
-    port = 465
-
-    username = os.getenv("SENDER") 
-    password = os.getenv("PASSWORD")
-
-    receiver = os.getenv("RECIEVER") 
-    context = ssl.create_default_context()
-
-    with smtplib.SMTP_SSL(host, port, context=context) as server:
-        server.login(username, password)
-        server.sendmail(username, receiver, message)
-    print("Email was sent!")
-
-def extract(source):
-    extractor=selectorlib.Extractor.from_yaml_file("extract.yaml")
-    value=extractor.extract(source)["tours"]
-    return value
+class Event:
+    def scrape(self,url):
+        """scrape the page source from the URL"""
+        response=requests.get(url, headers= HEADERS)
+        source=response.text
+        return source
+    
+    def extract(self,source):
+        extractor=selectorlib.Extractor.from_yaml_file("extract.yaml")
+        value=extractor.extract(source)["tours"]
+        return value
 
 
-def store(extracted):
-    row = extracted.split(",")
-    row = [item.strip() for item in row]
-    cursor = connection.cursor()
-    cursor.execute("INSERT INTO events VALUES(?,?,?)", row)
-    connection.commit()
+class Email:
+    def send_email(message):
+        host = "smtp.gmail.com"
+        port = 465
+
+        username = os.getenv("SENDER") 
+        password = os.getenv("PASSWORD")
+
+        receiver = os.getenv("RECIEVER") 
+        context = ssl.create_default_context()
+
+        with smtplib.SMTP_SSL(host, port, context=context) as server:
+            server.login(username, password)
+            server.sendmail(username, receiver, message)
+        print("Email was sent!")
 
 
-def read(extracted):
-    row = extracted.split(",")
-    row = [item.strip() for item in row]
-    GroupName, city, date = row
-    cursor = connection.cursor()
-    cursor.execute("SELECT * FROM events WHERE GroupName=? AND city=? AND date=?", (GroupName, city, date))
-    rows = cursor.fetchall()
-    print(rows)
-    return rows
+class Database:
+    def __init__(self , database_path):
+        self.connection = sqlite3.connect(database_path)
+    def store(extracted):
+        row = extracted.split(",")
+        row = [item.strip() for item in row]
+        cursor = connection.cursor()
+        cursor.execute("INSERT INTO events VALUES(?,?,?)", row)
+        connection.commit()
+
+
+    def read(self,extracted):
+        row = extracted.split(",")
+        row = [item.strip() for item in row]
+        GroupName, city, date = row
+        cursor = connection.cursor()
+        cursor.execute("SELECT * FROM events WHERE GroupName=? AND city=? AND date=?", (GroupName, city, date))
+        rows = cursor.fetchall()
+        return rows
 
 
 if __name__ == "__main__":
     while True:
-        scraped = scrape(URL)
-        extracted = extract(scraped)
+        event=Event()
+        scraped = event.scrape(URL)
+        extracted = event.extract(scraped)
         print(extracted)
 
         if extracted != "No upcoming tours":
-            row = read(extracted)
+            database=Database(database_path="data.db")
+            row = database.read(extracted)
             if not row:
-                store(extracted)
-                send_email(message="Hey, new event was found!")
+                database.store(extracted)
+                email=Email()
+                email.send(message="Hey, new event was found!")
         time.sleep(2)
